@@ -1,80 +1,78 @@
-version: "3"
+version: '3.8'
 
 networks:
-  private_network:
+  wirehole:
     ipam:
       driver: default
       config:
-        - subnet: 10.2.0.0/24
+        - subnet: 192.168.1.0/24
 
 services:
   unbound:
-    image: "mvance/unbound:latest"
+    hostname: unbound
     container_name: unbound
-    restart: unless-stopped
-    hostname: "unbound"
+    image: mvance/unbound-rpi:latest
+    mac_address: d0:ca:ab:cd:ef:01
+    restart: always
+    ports:
+      - "53/tcp"
+      - "53/udp"
     volumes:
       - "./unbound:/opt/unbound/etc/unbound/"
     networks:
-      private_network:
-        ipv4_address: 10.2.0.200
+      wirehole:
+        ipv4_address: 192.168.1.6
+
+  pihole:
+    hostname: pihole
+    container_name: pihole
+    image: pihole/pihole:latest
+    depends_on:
+      - unbound
+    mac_address: d0:ca:ab:cd:ef:02
+    restart: always
+    environment:
+      FTLCONF_REPLY_ADDR4: "192.168.1.5"  # should be same as internal service IP
+      WEBPASSWORD: ""
+      TZ: "Europe/Kiev"  # local time zone
+      PIHOLE_DNS_: "192.168.1.6;8.8.8.8" #last 2 ip related to provider
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"  # WEB UI
+    volumes:
+      - "./pihole:/etc/pihole"
+      - "./pihole/dnsmasq.d:/etc/dnsmasq.d"
+    cap_add:
+      - NET_ADMIN
+    networks:
+      wirehole:
+        ipv4_address: 192.168.1.5
 
   wireguard:
-    depends_on: [unbound, pihole]
-    image: linuxserver/wireguard
+    hostname: wireguard
     container_name: wireguard
+    image: weejewel/wg-easy
+    depends_on:
+      - unbound
+      - pihole
+    mac_address: d0:ca:ab:cd:ef:03
+    restart: always
+    environment:
+      - WG_HOST=78.27.136.216 # external IP of your server
+      - WG_PORT=51820
+      - WG_DEFAULT_DNS=192.168.1.5
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    volumes:
+      - ./wireguard:/etc/wireguard
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/Los_Angeles # Change to your timezone
-      - SERVERPORT=51820
-      #- SERVERURL=my.ddns.net #optional - For use with DDNS (Uncomment to use)
-      - PEERS=1 # How many peers to generate for you (clients)
-      - PEERDNS=10.2.0.100 # Set it to point to pihole
-      - INTERNAL_SUBNET=10.6.0.0
-      
-    volumes:
-      - ./wireguard:/config
-      - /lib/modules:/lib/modules
-    ports:
-      - "51820:51820/udp"
-    dns:
-      - 10.2.0.100 # Points to pihole
-      - 10.2.0.200 # Points to unbound
     sysctls:
+      - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
-
-    restart: unless-stopped
     networks:
-      private_network:
-        ipv4_address: 10.2.0.3
-
-  pihole:
-    depends_on: [unbound]
-    container_name: pihole
-    image: pihole/pihole:latest
-    restart: unless-stopped
-    hostname: pihole
-    dns:
-      - 127.0.0.1
-      - 10.2.0.200 # Points to unbound
-    environment:
-      TZ: "America/Los_Angeles"
-      WEBPASSWORD: "" # Blank password - Can be whatever you want.
-      ServerIP: 10.2.0.100 # Internal IP of pihole
-      DNS1: 10.2.0.200 # Unbound IP
-      DNS2: 10.2.0.200 # If we don't specify two, it will auto pick google.
-    # Volumes store your data between container upgrades
-    volumes:
-      - "./etc-pihole/:/etc/pihole/"
-      - "./etc-dnsmasq.d/:/etc/dnsmasq.d/"
-    # Recommended but not required (DHCP needs NET_ADMIN)
-    #   https://github.com/pi-hole/docker-pi-hole#note-on-capabilities
-    cap_add:
-      - NET_ADMIN
-    networks:
-      private_network:
-        ipv4_address: 10.2.0.100
+      wirehole:
+        ipv4_address: 192.168.1.7
