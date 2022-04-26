@@ -33,13 +33,13 @@ services:
     restart: always
     environment:
       FTLCONF_REPLY_ADDR4: "192.168.1.5"  # should be same as internal service IP
-      WEBPASSWORD: ""
+      WEBPASSWORD: ""  # docker exec -it pihole pihole -a -p newpasswordhere
       TZ: "Europe/Kiev"  # local time zone
       PIHOLE_DNS_: "192.168.1.6;8.8.8.8" #last 2 ip related to provider
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "80:80/tcp"  # WEB UI
+      - "8005:80/tcp"  # WEB UI
     volumes:
       - "./pihole:/etc/pihole"
       - "./pihole/dnsmasq.d:/etc/dnsmasq.d"
@@ -76,3 +76,23 @@ services:
     networks:
       wirehole:
         ipv4_address: 192.168.1.7
+
+  nginx:
+    hostname: nginx
+    container_name: nginx
+    image: jc21/nginx-proxy-manager:latest # Email: admin@example.com  >>  Password: changeme
+    mac_address: d0:ca:ab:cd:ef:04
+    restart: always
+    ports:
+      - '80:80/tcp'
+      - '81:81/tcp'
+      - '443:443/tcp'
+    volumes:
+      - ./nginx/data:/data
+      - ./nginx/letsencrypt:/etc/letsencrypt
+    networks:
+      wirehole:
+        ipv4_address: 192.168.1.8
+
+
+# ports: (HOST:CONTAINER)
